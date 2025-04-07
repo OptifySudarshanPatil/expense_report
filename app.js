@@ -10,8 +10,12 @@ let editingExpenseIndex = -1;
 const formatAmount = (amount) => {
     return new Intl.NumberFormat('en-IN', {
         style: 'currency',
-        currency: 'INR'
-    }).format(amount);
+        currency: 'INR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(amount)
+    .replace(/^(\D+)/, '₹') // Clean ₹ symbol
+    .replace(/,/g, ','); // Maintain commas
 };
 
 // Save expenses to localStorage
@@ -205,7 +209,7 @@ document.getElementById('expenseForm').addEventListener('submit', async (e) => {
     saveExpenses();
     displayExpenses();
     e.target.reset();
-}); // Added missing closing parenthesis
+});
 
 // Generate PDF
 const generateExpensePDF = (preview = false) => {
@@ -216,102 +220,208 @@ const generateExpensePDF = (preview = false) => {
     const margin = 15;
     let y = margin;
 
-    // Company header with centered name and timestamp
+    // Add a subtle header background
+    doc.setFillColor(247, 250, 252);
+    doc.rect(0, 0, pageWidth, 45, 'F');
+    
+    // Add a thin accent line at the top
+    doc.setDrawColor(0, 82, 57);
+    doc.setLineWidth(0.5);
+    doc.line(0, 0, pageWidth, 0);
+
+    // Header section with logo and company name
     if (companySettings.logo) {
-        const logoHeight = 25;
+        const logoHeight = 22;
         const logoWidth = logoHeight;
         doc.addImage(companySettings.logo, 'JPEG', margin, y, logoWidth, logoHeight);
+        
+        // Company name with better typography
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 82, 57); // Dark green
+        doc.text(companySettings.name || 'Company Name', margin + logoWidth + 8, y + (logoHeight/2), { 
+            align: 'left', 
+            baseline: 'middle'
+        });
+        
+        y += logoHeight + 8;
+    } else {
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 82, 57);
+        doc.text(companySettings.name || 'Company Name', margin, y + 10);
+        y += 15;
     }
 
-    doc.setFontSize(22);
-    doc.setFont('helvetica', 'bold');
-    doc.text(companySettings.name || 'Company Name', pageWidth / 2, y + 15, { align: 'center' });
-
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    const timestamp = new Date().toLocaleString();
-    doc.text(`Generated on: ${timestamp}`, pageWidth - margin, margin, { align: 'right' });
-
-    y += 25;
+    // Title with better styling
     const month = new Date().toLocaleString('default', { month: 'long' });
     const year = new Date().getFullYear();
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(45, 55, 72);
     doc.text(`Expense Statement - ${month} ${year}`, pageWidth / 2, y, { align: 'center' });
 
-    y += 15;
-    doc.setFontSize(10);
-    const details = [
-        [`Employee Code: ${employeeDetails.empCode}`, `Department: ${employeeDetails.department}`],
-        [`Employee Name: ${employeeDetails.empName}`, `Designation: ${employeeDetails.designation}`],
-        [`Location: ${employeeDetails.location}`, `Reporting Head: ${employeeDetails.reportingHead}`]
-    ];
+    // Employee details section
+    y += 12;
+    doc.setFillColor(252, 252, 253);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    
+    // Draw employee details box with subtle styling
+    const boxHeight = 32; // Increased height for two rows
+    const boxWidth = pageWidth - (margin * 2);
+    doc.roundedRect(margin, y - 3, boxWidth, boxHeight, 1, 1, 'FD');
+    
+    // Employee details content in two rows
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(45, 55, 72);
+    
+    // Calculate widths for each section
+    const labelWidth = 25;
+    const valueWidth = 55;
+    const spacing = 8;
+    
+    // First row
+    let xPos = margin + 5;
+    let rowY = y + 8;
+    
+    // Employee Code
+    doc.setFont('helvetica', 'normal');
+    doc.text('Code:', xPos, rowY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(employeeDetails.empCode || '', xPos + labelWidth, rowY);
+    
+    // Name
+    xPos += labelWidth + valueWidth + spacing;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Name:', xPos, rowY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(employeeDetails.empName || '', xPos + labelWidth, rowY);
+    
+    // Department
+    xPos += labelWidth + valueWidth + spacing;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Dept:', xPos, rowY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(employeeDetails.department || '', xPos + labelWidth, rowY);
+    
+    // Second row
+    xPos = margin + 5;
+    rowY = y + 20; // Move to second row
+    
+    // Designation
+    doc.setFont('helvetica', 'normal');
+    doc.text('Desig:', xPos, rowY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(employeeDetails.designation || '', xPos + labelWidth, rowY);
+    
+    // Location
+    xPos += labelWidth + valueWidth + spacing;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Location:', xPos, rowY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(employeeDetails.location || '', xPos + labelWidth, rowY);
+    
+    // Reporting Head
+    xPos += labelWidth + valueWidth + spacing;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Rep Head:', xPos, rowY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(employeeDetails.reportingHead || '', xPos + labelWidth, rowY);
 
-    details.forEach(row => {
-        doc.text(row[0], margin, y);
-        doc.text(row[1], pageWidth / 2, y);
-        y += 7;
-    });
-
-    y += 10;
+    // Expense table
+    y += boxHeight + 8;
     const headers = ['S.No', 'Date', 'Details', 'Category', 'Amount'];
-    doc.setDrawColor(200);
-    const columnWidths = [20, 30, 50, 35, 45]; // Adjusted widths, more space for amount
+    
+    // Table styling
+    const columnWidths = [20, 30, 70, 35, 30];
     const alignments = ['center', 'left', 'left', 'left', 'right'];
     const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
     const startX = (pageWidth - tableWidth) / 2;
 
-    const minTableHeight = Math.max((expenses.length * 7) + 15, 30);
-    const tableHeight = Math.min(minTableHeight, 250);
+    // Header row with gradient effect
+    doc.setFillColor(240, 243, 246);
+    doc.rect(startX, y, tableWidth, 12, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.rect(startX, y, tableWidth, 12);
 
-    const drawTableHeader = (yPos) => {
-        doc.setFillColor(240, 240, 240);
-        doc.rect(startX, yPos, tableWidth, 8, 'F');
-        
-        let x = startX;
-        headers.forEach((header, i) => {
-            const xPos = alignments[i] === 'right'
-                ? x + columnWidths[i] - 4
-                : x + (columnWidths[i] / 2);
-            doc.text(header, xPos, yPos + 6, { align: alignments[i] });
-            
-            // Draw vertical separator
-            if (i < headers.length - 1) {
-                doc.line(x + columnWidths[i], yPos, x + columnWidths[i], yPos + tableHeight);
-            }
-            x += columnWidths[i];
-        });
-    };
+    // Header text
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(45, 55, 72);
+    
+    let x = startX;
+    headers.forEach((header, i) => {
+        const xPos = alignments[i] === 'right'
+            ? x + columnWidths[i] - 5
+            : alignments[i] === 'center'
+            ? x + (columnWidths[i] / 2)
+            : x + 5;
+        doc.text(header, xPos, y + 8, { align: alignments[i] });
+        x += columnWidths[i];
+    });
 
-    drawTableHeader(y);
-    doc.rect(startX, y, tableWidth, tableHeight);
-    y += 8;
-
+    // Table content
+    y += 12;
+    doc.setFont('helvetica', 'normal');
     let totalAmount = 0;
+    let isEvenRow = false;
+
     expenses.forEach((expense, index) => {
-        if (y > pageHeight - 50) {
+        if (y > pageHeight - 60) {
             doc.addPage();
-            y = margin;
-            drawTableHeader(y);
-            doc.rect(startX, y, tableWidth, tableHeight);
-            y += 8;
+            y = margin + 10;
+            // Add subtle header to new page
+            doc.setFillColor(247, 250, 252);
+            doc.rect(0, 0, pageWidth, 20, 'F');
+            // Repeat table header
+            doc.setFillColor(240, 243, 246);
+            doc.rect(startX, y, tableWidth, 12, 'F');
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.2);
+            doc.rect(startX, y, tableWidth, 12);
+
+            doc.setFont('helvetica', 'bold');
+            x = startX;
+            headers.forEach((header, i) => {
+                const xPos = alignments[i] === 'right'
+                    ? x + columnWidths[i] - 5
+                    : alignments[i] === 'center'
+                    ? x + (columnWidths[i] / 2)
+                    : x + 5;
+                doc.text(header, xPos, y + 8, { align: alignments[i] });
+                x += columnWidths[i];
+            });
+            y += 12;
+            doc.setFont('helvetica', 'normal');
         }
 
+        // Zebra striping for rows
+        if (isEvenRow) {
+            doc.setFillColor(250, 250, 252);
+            doc.rect(startX, y - 5, tableWidth, 10, 'F');
+        }
+
+        // Row data
+        x = startX;
         const rowData = [
             (index + 1).toString().padStart(2, '0'),
             new Date(expense.date).toLocaleDateString(),
-            expense.details.substring(0, 20),
+            expense.details.substring(0, 40),
             expense.category,
             formatAmount(expense.amount)
         ];
 
-        let x = startX;
         rowData.forEach((text, i) => {
             const xPos = alignments[i] === 'right'
-                ? x + columnWidths[i] - 6  // More padding for amount
+                ? x + columnWidths[i] - 5
                 : alignments[i] === 'center'
                 ? x + (columnWidths[i] / 2)
-                : x + 4;  // Left padding for text
+                : x + 5;
             
-            doc.text(text.toString(), xPos, y + 5, { 
+            doc.text(text.toString(), xPos, y, { 
                 align: alignments[i],
                 maxWidth: columnWidths[i] - 8
             });
@@ -319,55 +429,105 @@ const generateExpensePDF = (preview = false) => {
         });
 
         totalAmount += expense.amount;
-        y += 7;
+        y += 10;
+        isEvenRow = !isEvenRow;
     });
 
-    try {
-        y += 5;
-        doc.setFillColor(245, 245, 245);
-        doc.rect(startX, y, tableWidth, 8, 'F');
-        doc.setFont('helvetica', 'bold');
+    // Total section with enhanced styling
+    y += 2;
+    doc.setFillColor(240, 243, 246);
+    doc.roundedRect(startX, y - 5, tableWidth, 12, 1, 1, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(startX, y - 5, tableWidth, 12, 1, 1);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('Total:', startX + tableWidth - columnWidths[4] - 5, y + 2);
+    doc.text(formatAmount(totalAmount), startX + tableWidth - 5, y + 2, { align: 'right' });
+
+    // Footer with signature section
+    const addSignatureFooter = () => {
+        const footerY = pageHeight - 30;
         
-        const totalSection = tableWidth - columnWidths[4];
-        doc.text('Total:', startX + totalSection + 5, y + 5);
-        doc.text(formatAmount(totalAmount), startX + tableWidth - 6, y + 5, { 
-            align: 'right',
-            maxWidth: columnWidths[4] - 8
+        // Add subtle footer background
+        doc.setFillColor(247, 250, 252);
+        doc.rect(0, footerY - 5, pageWidth, 35, 'F');
+        
+        // Signature section
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(45, 55, 72);
+        
+        const signatureWidth = (pageWidth - (margin * 2)) / 3;
+        [
+            ['Claimed By', employeeDetails.empName],
+            ['Checked By', ''],
+            ['Authorized By', employeeDetails.reportingHead]
+        ].forEach((sig, i) => {
+            const x = margin + (i * signatureWidth) + 10;
+            doc.text(sig[0], x, footerY);
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.5);
+            doc.line(x, footerY + 5, x + signatureWidth - 30, footerY + 5);
+            doc.text(sig[1] || '', x, footerY + 10);
         });
-    } catch (err) {
-        console.error('Error drawing total row:', err);
+
+        // Timestamp in footer
+        doc.setFontSize(7);
+        doc.setTextColor(160, 174, 192);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth - margin, footerY + 15, { align: 'right' });
+    };
+
+    // Add footer to current page
+    addSignatureFooter();
+
+    // Handle attachments with signature footer on each page
+    if (expenses.some(e => e.attachment)) {
+        expenses.forEach((expense, index) => {
+            if (expense.attachment) {
+                doc.addPage();
+                
+                // Attachment header
+                doc.setFontSize(16);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(40, 40, 40);
+                doc.text('Expense Receipt', pageWidth / 2, margin, { align: 'center' });
+                
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'normal');
+                
+                // Add a box around attachment details
+                doc.setFillColor(248, 249, 250);
+                doc.rect(margin, margin + 10, pageWidth - (margin * 2), 30, 'F');
+                doc.setDrawColor(220, 220, 220);
+                doc.rect(margin, margin + 10, pageWidth - (margin * 2), 30);
+                
+                doc.text('Expense Details:', margin + 8, margin + 22);
+                doc.text(expense.details, margin + 8, margin + 30);
+                doc.text(`Date: ${new Date(expense.date).toLocaleDateString()}`, pageWidth - margin - 50, margin + 22);
+                doc.text(`Amount: ${formatAmount(expense.amount)}`, pageWidth - margin - 50, margin + 30);
+
+                if (expense.attachment.startsWith('data:image')) {
+                    try {
+                        // Calculate image dimensions to fit page while maintaining aspect ratio
+                        const maxWidth = pageWidth - (margin * 2);
+                        const maxHeight = pageHeight - (margin * 2) - 80; // Adjusted for footer
+                        doc.addImage(expense.attachment, 'JPEG', margin, margin + 45, maxWidth, maxHeight);
+                    } catch (err) {
+                        doc.text('Error loading image attachment', margin, margin + 45);
+                    }
+                } else {
+                    doc.text('PDF attachment available in web view', margin, margin + 45);
+                }
+
+                // Add signature footer to attachment page
+                addSignatureFooter();
+            }
+        });
     }
 
-    y += 20;
-    [
-        ['Claimed By', employeeDetails.empName],
-        ['Checked By', ''],
-        ['Authorized By', employeeDetails.reportingHead]
-    ].forEach((sig, i) => {
-        const x = margin + (i * 60);
-        doc.text(sig[0], x, y);
-        doc.text('________________', x, y + 10);
-        doc.text(sig[1] || '', x, y + 15);
-    });
-
-    expenses.forEach(expense => {
-        if (expense.attachment) {
-            doc.addPage();
-            doc.text('Attachment for: ' + expense.details, margin, margin);
-            doc.text('Date: ' + new Date(expense.date).toLocaleDateString(), margin, margin + 7);
-
-            if (expense.attachment.startsWith('data:image')) {
-                try {
-                    doc.addImage(expense.attachment, 'JPEG', margin, margin + 15, pageWidth - (margin * 2), 0);
-                } catch (err) {
-                    doc.text('Error loading image attachment', margin, margin + 15);
-                }
-            } else {
-                doc.text('PDF attachment available in web view', margin, margin + 15);
-            }
-        }
-    });
-
+    // Output handling
     if (preview) {
         try {
             const pdfBlob = doc.output('blob');
