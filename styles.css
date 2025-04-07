@@ -1,0 +1,31 @@
+.table-responsive {
+    overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}
+
+.card {
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.table th {
+    background-color: #f8f9fa;
+}
+
+#attachmentsList img {
+    max-height: 200px;
+    object-fit: contain;
+}
+
+#attachmentsList .card {
+    height: 100%;
+}
